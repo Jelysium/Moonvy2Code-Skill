@@ -108,6 +108,29 @@ print_layer(page)
 
 **坐标系统说明**：月维 JSON 中子图层的坐标可能是画布相对的（需要减去 page.rect.x/y），也可能是页面相对的。通过检查第一个子图层（通常是页面背景 Rectangle）的坐标来判断：如果背景 rect 接近 (0, 0)，则坐标是页面相对的。
 
+**Step 1 产物要求：图标清单**
+
+全量扫描完成后，必须单独输出一份图标清单。使用以下规则识别图标图层：
+
+1. `type: "artboard"` 且尺寸 < 60×60，子图层全部是 `type: "layer"` 且含 `fills`
+2. `type: "group"` 且所有子图层是 `type: "layer"`、无 `textbox`，尺寸 < 80×80
+3. 图层名称含 "Icon"、"Vector"、"arrow"、"logo" 等关键词
+4. `type: "group"` 含多个 Vector 子图层（多色 logo）
+
+输出格式示例：
+
+```
+=== 图标清单 (共 N 个) ===
+[icon] 162:894 Vector (4.3,3.6,27.1,28.5) fill=#333 → Group 605 "返回顶部" 的箭头图标
+[icon] 162:907 Vector (0.1,0.5,21.7,20.8) fill=#909 → Group 631 "收藏" 的星标图标
+[icon] 162:925 Vector (2.3,2.3,17.1,17.1) fill=#FFF → Group 3487 "搜索" 的放大镜图标
+[icon] 162:968 Vector (0,0,30,30) fill=#FFF → Group 3516 "Footer右侧" 的图标
+[icon] 162:973 Vector (1.5,1.5,21.2,21.2) fill=#FFF → Group 23 "Footer电话" 的图标
+[logo] Group 3488 (49,13,52,55.6) 7个Vector子图层 → "Logo图标"
+```
+
+**关卡检查**：图标清单独独列出后，才能进入 Step 2。数量为 0 时跳过 Step 2 直接进入 Step 3。
+
 ### Step 2: 矢量图标识别与裁剪
 
 月维数据中的矢量图标只有填充颜色和尺寸，**没有 SVG path 数据**。必须从快照裁剪。
@@ -149,6 +172,28 @@ crop.save(f'assets/{safe_name}.png')
 ```
 
 **规则：所有内联 SVG 必须设置 width 和 height 属性，或通过 CSS 约束尺寸。**
+
+**⚠️ 禁止事项**
+
+- **禁止手绘 SVG path**：月维 JSON 中没有 path/points/geometry/vectorData 等路径数据（已验证），手绘必然导致形状错误（如五角星画成爱心、Logo 画成菱形）
+- **禁止猜测图标形状**：即使图标看起来简单（如放大镜），也必须裁剪，因为无法确认实际形状
+- **所有图标必须使用 `<img>` 标签引用裁剪后的 PNG**，不要使用内联 `<svg>`
+
+**唯一例外**：如果图标在月维 JSON 的 `images` 对象中有 `svg` 类型的 slice（如 `slices.svg.id`），则可以下载该 SVG 直接使用。
+
+**Step 2 产物验证**
+
+裁剪完成后，必须执行以下验证：
+
+```bash
+# 列出所有裁剪的图标文件
+ls -la assets/
+
+# 验证：Step 1 图标清单中的每个条目都有对应 PNG
+# 如 Step 1 列出 6 个图标，assets/ 目录中应有 6 个对应的 PNG 文件
+```
+
+**关卡检查**：所有图标裁剪文件确认存在后，才能进入 Step 3（间距计算）。
 
 ### Step 3: 精确间距计算（核心步骤）
 
@@ -351,6 +396,41 @@ for i in range(1, len(sections)):
 | 只算容器 padding-top/left | 计算全部四边 padding（top/right/bottom/left） |
 | 只算容器内子元素间距 | 计算所有相邻区块之间的间距 |
 | 忽略卡片底部 padding-bottom | 从容器底边减去最低子元素底边：`(container.y+container.h) - (child.y+child.h)` |
+| 导航文字依赖 flexbox 自动居中 | 计算 `text.rect.y - header.rect.y` 得到精确 top 值 |
+| 激活下划线间距随意设 padding | 计算 `underline.rect.y - (text.rect.y + lineHeight)` 得到精确间距 |
+
+### 导航元素间距未按坐标计算（已修复）
+
+**原因**：导航文字的垂直对齐和激活下划线间距没有从 rect 坐标精确计算，而是依赖浏览器 flexbox 自动居中或随意设置 padding 值。
+
+**防范**：
+1. Step 3 间距计算必须覆盖**所有可见元素的定位值**，不仅是卡片间距
+2. 导航文字垂直位置 = `text.rect.y - header.rect.y`
+3. 激活下划线间距 = `underline.rect.y - (text.rect.y + text.lineHeight)`
+4. 禁止依赖 flexbox 自动居中代替精确坐标，除非确认自动居中结果与设计一致
+
+### 图标内嵌文字遗漏（已修复）
+
+**原因**：矢量图标可能包含内嵌文字（如返回顶部按钮的"TOP"文字），这些文字在 JSON 中没有独立的 text 图层，而是烘焙在矢量路径中。
+
+**防范**：
+1. 图标裁剪是唯一可靠的方式获取完整图标内容（包括内嵌文字）
+2. 裁剪后检查 PNG 图片内容，确认是否有文字被包含在图标中
+
+### 矢量图标手绘 SVG 导致形状错误（已修复）
+
+**原因**：跳过 Step 2（矢量图标识别与裁剪），用手绘 SVG path 替代从快照裁剪。月维 JSON 中 Vector 图层只有 rect（位置尺寸）和 fills（颜色），没有 path/points/geometry/vectorData。手绘导致：
+- 五角星画成爱心（收藏图标）
+- Logo 多色编组画成菱形（品牌 Logo）
+- 箭头形状错误（返回顶部）
+- 电话/公网图标形状错误（Footer）
+
+**防范**：
+1. Step 1 必须输出图标清单，列出所有需要裁剪的图标图层
+2. Step 2 必须用 Python Pillow 从 `design-screenshot` 按 rect 裁剪每个图标为 PNG
+3. **禁止手绘 SVG path**，禁止猜测图标形状
+4. HTML 中所有图标必须用 `<img src="assets/xxx.png">` 引用裁剪后的 PNG
+5. 唯一例外：图标在 JSON 的 `slices` 中有 `svg` 类型资源时可下载 SVG 直接使用
 
 ### Step 4: 图层分类与处理策略
 
