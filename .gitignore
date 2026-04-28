@@ -5,14 +5,14 @@
 !.gitignore
 !README.md
 
-# === 只跟踪 moonvy-design skill ===
+# === 只跟踪 moonvy2code skill ===
 !.claude/
 !.claude/skills/
-!.claude/skills/moonvy-design/
-!.claude/skills/moonvy-design/**
+!.claude/skills/moonvy2code/
+!.claude/skills/moonvy2code/**
 
 # === 忽略其他所有 .claude 内容 ===
 .claude/*
 !.claude/skills
 .claude/skills/*
-!.claude/skills/moonvy-design
+!.claude/skills/moonvy2code

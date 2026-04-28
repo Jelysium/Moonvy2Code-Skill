@@ -19,7 +19,7 @@
 也可以通过命令调用：
 
 ```
-/moonvy-design <月维设计链接>
+/moonvy2code <月维设计链接>
 ```
 
 适用于 Claude Code、Codex 及所有支持 Skill 规范的环境。

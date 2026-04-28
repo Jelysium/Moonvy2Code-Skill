@@ -1,5 +1,5 @@
 ---
-name: moonvy-design
+name: moonvy2code
 description: 将月维设计标注链接转为前端代码，使用 Playwright 浏览器自动化提取精确设计数据（图层位置、颜色、字体等）
 version: 1.1.0
 ---
